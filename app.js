@@ -25,18 +25,13 @@ const storage = multer.diskStorage({
 const upload = multer({ storage: storage });
 
 // Ruta para subir o reemplazar una imagen
-// Ruta para subir o reemplazar una imagen
 app.post("/upload/:userId", upload.single("image"), (req, res) => {
   const userId = req.params.userId;
-  const imagePathJPG = path.join(__dirname, "uploads", userId + ".jpg");
-  const imagePathPNG = path.join(__dirname, "uploads", userId + ".png");
+  const imagePathJPG = path.join("./uploads/", userId + ".jpg");
+  const imagePathPNG = path.join("./uploads/", userId + ".png");
 
   // Mueve el archivo JPG a una ubicación temporal o con un nombre temporal
-  const tempImagePathJPG = path.join(
-    __dirname,
-    "uploads",
-    userId + "_temp.jpg"
-  );
+  const tempImagePathJPG = path.join("./uploads/", userId + "_temp.jpg");
 
   fs.rename(imagePathJPG, tempImagePathJPG, (err) => {
     if (err) {
@@ -68,11 +63,10 @@ app.post("/upload/:userId", upload.single("image"), (req, res) => {
     });
   });
 });
-
 // Ruta para obtener la imagen
 app.get("/get/:userId", (req, res) => {
   const userId = req.params.userId;
-  const imagePath = path.join(__dirname, "uploads", userId + ".png"); // Asegúrate de que la extensión coincida con la que utilizas
+  const imagePath = path.join("./uploads/", userId + ".png"); // Asegúrate de que la extensión coincida con la que utilizas
 
   // Verifica si la imagen existe en el sistema de archivos
   if (fs.existsSync(imagePath)) {
