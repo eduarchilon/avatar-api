@@ -4,12 +4,17 @@ const fs = require("fs");
 const path = require("path");
 const cors = require("cors");
 const sharp = require("sharp");
+const { Octokit } = require("@octokit/rest");
 
 const app = express();
 const port = 3000;
 app.use(cors());
 
 app.use(express.json());
+
+const octokit = new Octokit({
+  auth: "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", // Asegúrate de definir esta variable de entorno
+});
 
 // Configuración de Multer para el almacenamiento de archivos
 const storage = multer.diskStorage({
@@ -25,58 +30,52 @@ const storage = multer.diskStorage({
 const upload = multer({ storage: storage });
 
 // Ruta para subir o reemplazar una imagen
-app.post("/upload/:userId", upload.single("image"), (req, res) => {
+app.post("/upload/:userId", upload.single("image"), async (req, res) => {
   const userId = req.params.userId;
-  const imagePathJPG = path.join("./uploads/", userId + ".jpg");
-  const imagePathPNG = path.join("./uploads/", userId + ".png");
+  const imagePathPNG = path.join(__dirname, "uploads", userId + ".png");
 
-  // Mueve el archivo JPG a una ubicación temporal o con un nombre temporal
-  const tempImagePathJPG = path.join("./uploads/", userId + "_temp.jpg");
-
-  fs.rename(imagePathJPG, tempImagePathJPG, (err) => {
-    if (err) {
-      console.error("Error al mover el archivo JPG", err);
+  // Convierte el archivo de imagen al formato PNG directamente
+  sharp(req.file.path).toFile(imagePathPNG, async (conversionError) => {
+    if (conversionError) {
+      console.error(
+        "Error al convertir y guardar la imagen en formato PNG",
+        conversionError
+      );
       res.status(500).send("Error al subir y convertir la imagen");
-      return;
+    } else {
+      // Elimina el archivo original
+      fs.unlink(req.file.path, (deleteError) => {
+        if (deleteError) {
+          console.error("Error al eliminar el archivo original", deleteError);
+        }
+        // Subir la imagen a GitHub
+        uploadImageToGitHub(userId, imagePathPNG)
+          .then(() => {
+            res.send("Imagen subida y convertida a PNG correctamente");
+          })
+          .catch((uploadError) => {
+            console.error("Error al subir la imagen a GitHub", uploadError);
+            res.status(500).send("Error al subir la imagen a GitHub");
+          });
+      });
     }
-
-    // Realiza la conversión desde el archivo temporal
-    sharp(tempImagePathJPG).toFile(imagePathPNG, (conversionError) => {
-      if (conversionError) {
-        console.error(
-          "Error al convertir y guardar la imagen en formato PNG",
-          conversionError
-        );
-        res.status(500).send("Error al subir y convertir la imagen");
-      } else {
-        // Elimina el archivo JPG temporal
-        fs.unlink(tempImagePathJPG, (deleteError) => {
-          if (deleteError) {
-            console.error(
-              "Error al eliminar el archivo JPG temporal",
-              deleteError
-            );
-          }
-          res.send("Imagen subida y convertida a PNG correctamente");
-        });
-      }
-    });
   });
 });
-// Ruta para obtener la imagen
-app.get("/get/:userId", (req, res) => {
-  const userId = req.params.userId;
-  const imagePath = path.join("./uploads/", userId + ".png"); // Asegúrate de que la extensión coincida con la que utilizas
 
-  // Verifica si la imagen existe en el sistema de archivos
-  if (fs.existsSync(imagePath)) {
-    // Si la imagen existe, envíala como respuesta
-    res.sendFile(imagePath);
-  } else {
-    // Si la imagen no existe, devuelve una respuesta de error o una imagen predeterminada
-    res.status(404).send("Imagen no encontrada");
+async function uploadImageToGitHub(userId, imagePath) {
+  try {
+    const fileContent = fs.readFileSync(imagePath);
+    await octokit.repos.createOrUpdateFile({
+      owner: "eduarchilon",
+      repo: "avatar-api",
+      path: `uploads/${userId}.png`,
+      message: `Subida de imagen para ${userId}`,
+      content: fileContent.toString("base64"),
+    });
+  } catch (error) {
+    throw error;
   }
-});
+}
 
 app.listen(port, () => {
   console.log(`Servidor escuchando en el puerto ${port}`);
